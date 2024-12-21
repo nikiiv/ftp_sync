@@ -3,8 +3,10 @@ import ssl
 import ftplib
 import configparser
 import argparse
+import logging
 from datetime import datetime
 from typing import Dict
+
 
 
 def load_config(config_path):
@@ -16,6 +18,7 @@ def load_config(config_path):
                 'remote_path': config.get('ftp', 'remote_path', fallback='/'),
                 'local_path': config.get('ftp', 'local_path', fallback='.'),
                 'dry_run': config.getboolean('ftp', 'dry_run', fallback=False)}
+    log.info("Config {config}")
     return ftp_conf
 
 def create_ftp_connection(host, port, username, password):
@@ -31,6 +34,7 @@ def create_ftp_connection(host, port, username, password):
     ftps.auth()  # upgrade to secure control connection
     ftps.prot_p()  # secure data connection
     ftps.login(username, password)
+    logging
     return ftps
 
 def list_remote_files(ftps, remote_path):
@@ -41,6 +45,7 @@ def list_remote_files(ftps, remote_path):
     files = {}
 
     def walk_dir(path):
+        log.info("Remote: {path}")
         # Try MLSD first (if supported), else fallback to LIST
         try:
             entries = list(ftps.mlsd(path))
@@ -103,6 +108,7 @@ def list_local_files(local_path: str) -> Dict[str, int]:
     return files
 
 def main():
+
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='FTP sync script')
     parser.add_argument('-c', '--config', default='sync_config.ini', help='Path to config file')
@@ -112,6 +118,7 @@ def main():
 
     # Load configuration from file
     conf = load_config(args.config)
+    logger
 
     # Override dry_run from command line if provided
     if args.dry_run:
@@ -187,4 +194,11 @@ def main():
     print(f"Missing files report: {missing_files_report}")
 
 if __name__ == "__main__":
+    #configure logging
+    logging.basicConfig(
+        level=logging.DEBUG,               # Set the minimum level of messages you want to handle
+        format='%(asctime)s %(levelname)s %(message)s' # Format for log messages
+    )
+    log = logging.getLogger(__name__)  # logger named after the module
+    log.info("This message comes from my module.")
     main()
