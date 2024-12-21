@@ -34,7 +34,7 @@ def create_ftp_connection(host, port, username, password):
     ftps.auth()  # upgrade to secure control connection
     ftps.prot_p()  # secure data connection
     ftps.login(username, password)
-    logging
+    log.info("Connected")
     return ftps
 
 def list_remote_files(ftps, remote_path):
