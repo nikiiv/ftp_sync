@@ -9,16 +9,17 @@ from typing import Dict
 
 
 
-def load_config(config_path):
+def load_config(config_path, section='ftp'):
     """Load configuration from the given INI config file."""
     config = configparser.ConfigParser()
     config.read(config_path)
-    ftp_conf = {'host': config.get('ftp', 'host'), 'port': config.getint('ftp', 'port', fallback=21),
-                'username': config.get('ftp', 'username'), 'password': config.get('ftp', 'password'),
-                'remote_path': config.get('ftp', 'remote_path', fallback='/'),
-                'local_path': config.get('ftp', 'local_path', fallback='.'),
-                'dry_run': config.getboolean('ftp', 'dry_run', fallback=False)}
-    log.info("Config {config}")
+    ftp_conf = {'host': config.get(section, 'host'), 'port': config.getint(section, 'port', fallback=21),
+                'username': config.get(section, 'username'), 'password': config.get(section, 'password'),
+                'remote_path': config.get(section, 'remote_path', fallback='/'),
+                'local_path': config.get(section, 'local_path', fallback='.'),
+                'output_path': config.get(section, 'output_path', fallback='.'),
+                'dry_run': config.getboolean(section, 'dry_run', fallback=False)}
+    log.info(f"Config {config}")
     return ftp_conf
 
 def create_ftp_connection(host, port, username, password):
@@ -34,7 +35,7 @@ def create_ftp_connection(host, port, username, password):
     ftps.auth()  # upgrade to secure control connection
     ftps.prot_p()  # secure data connection
     ftps.login(username, password)
-    log.info("Connected")
+    log.info("Connected!")
     return ftps
 
 def list_remote_files(ftps, remote_path):
@@ -45,7 +46,7 @@ def list_remote_files(ftps, remote_path):
     files = {}
 
     def walk_dir(path):
-        log.info("Remote: {path}")
+        log.info(f"Remote: {path}")
         # Try MLSD first (if supported), else fallback to LIST
         try:
             entries = list(ftps.mlsd(path))
@@ -99,26 +100,29 @@ def list_local_files(local_path: str) -> Dict[str, int]:
     Returns a dict {relative_path: size}
     """
     files = {}
+    log.info(f"Local: {local_path}")
     for root, dirs, filenames in os.walk(local_path):
         for f in filenames:
             fullpath = os.path.join(root, f)
             rel = os.path.relpath(fullpath, local_path)
             size = os.path.getsize(fullpath)
             files[rel] = size
+    log.info(f"Found {len(files)} local files")
     return files
 
 def main():
 
     # Parse command line arguments
     parser = argparse.ArgumentParser(description='FTP sync script')
-    parser.add_argument('-c', '--config', default='sync_config.ini', help='Path to config file')
+    parser.add_argument('-c', '--config', default='config.ini', help='Path to config file')
+    parser.add_argument('-f', '--ftp', default='ftp', help='Default ftp server')
     parser.add_argument('-dry', '--dry-run', action='store_true', help='Perform a dry run (no files will be downloaded)')
-    parser.add_argument('-o', '--output', default='.', help='Directory to store output files')
+    #parser.add_argument('-o', '--output', default='.', help='Directory to store output files')
     args = parser.parse_args()
 
     # Load configuration from file
-    conf = load_config(args.config)
-    logger
+    conf = load_config(args.config, args.ftp)
+    log.info(f"Loaded config: {conf}")
 
     # Override dry_run from command line if provided
     if args.dry_run:
@@ -127,7 +131,7 @@ def main():
         dry_run = conf['dry_run']
 
     # Output directory from command line overrides config usage
-    output_dir = args.output
+    output_dir = conf['output_path']
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 
@@ -158,10 +162,10 @@ def main():
             new_files.append((rfile, rsize))
 
     # Determine which files are locally present but missing remotely
-    missing_files = []
+    not_on_ftp_files = []
     for lfile, lsize in local_files.items():
         if lfile not in remote_files:
-            missing_files.append((lfile, lsize))
+            not_on_ftp_files.append((lfile, lsize))
 
     # Download the new files if not dry run
     if not dry_run:
@@ -173,15 +177,17 @@ def main():
 
     # Create reports
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    new_files_report = os.path.join(output_dir, f"new_files_{timestamp}.txt")
-    missing_files_report = os.path.join(output_dir, f"missing_files_{timestamp}.txt")
+    new_files_report = os.path.join(output_dir, f"new_files_on_ftp_{timestamp}.txt")
+    not_on_ftp_files_report = os.path.join(output_dir, f"files_not_on_ftp_{timestamp}.txt")
+    log.info(f"New files on FTP: {len(new_files)}")
+    log.info(f"Not on FTP on FTP: {len(not_on_ftp_files)}")
 
     with open(new_files_report, 'w') as nf:
         for (rfile, rsize) in new_files:
             nf.write(f"{rfile}\t{rsize}\n")
 
-    with open(missing_files_report, 'w') as mf:
-        for (lfile, lsize) in missing_files:
+    with open(not_on_ftp_files_report, 'w') as mf:
+        for (lfile, lsize) in not_on_ftp_files:
             mf.write(f"{lfile}\t{lsize}\n")
 
     # Close FTP connection
@@ -191,7 +197,7 @@ def main():
     if dry_run:
         print("This was a dry run. No files were downloaded.")
     print(f"New files report: {new_files_report}")
-    print(f"Missing files report: {missing_files_report}")
+    print(f"Missing files report: {not_on_ftp_files_report}")
 
 if __name__ == "__main__":
     #configure logging
